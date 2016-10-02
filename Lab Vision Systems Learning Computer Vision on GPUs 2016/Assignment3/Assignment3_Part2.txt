@@ -1,0 +1,123 @@
+# PART2 Build and train deeper MLPs with other activation functions, regularization, and optimization methods
+# test accuracy does not improve more than 0.97. This code achieves the same accuracy but with more hidden layers.
+# and tf.nn.dropout regularization in an output layer. Convolutional Neural Net has to be used to 
+# improve test accuracy to my mind. Full-connected neural net is not enough.
+
+import numpy as np
+import matplotlib.pyplot as plt
+import tensorflow as tf
+from tensorflow.examples.tutorials.mnist import input_data
+%matplotlib inline
+
+
+#sess = tf.Session()
+
+n_input = 784 # e.g. MNIST data input (img shape: 28*28)
+n_hidden_1 = 392 # first hidden layer num units (e.g. half of input units)
+n_hidden_2 = 130 # second hidden layer num units
+n_hidden_3 = 45  # third hidden layer num units
+n_classes  = 10 # e.g. MNIST total classes (0-9 digits)
+
+# tf Graph variables
+x = tf.placeholder("float", [None, n_input], name='x')
+y = tf.placeholder("float", [None, n_classes], name='y')
+
+# Store layers weight & bias
+# I will use three-hidden layer MLP, in h1 there will 392, in h2 there will be 130 and in h3 there will be 45 neurons
+stddev = 0.1 # <== This greatly affects accuracy!!
+
+# TRY TO GET BETTER MODELS BY:
+
+# 1. Increasing hidden layers
+# 2. Changing the number of hidden units of each layer
+
+weights = {
+    'input_h1': tf.Variable(tf.random_normal([n_input, n_hidden_1], stddev=stddev)),
+    'h1_h2': tf.Variable(tf.random_normal([n_hidden_1, n_hidden_2], stddev=stddev)),
+    'h2_h3': tf.Variable(tf.random_normal([n_hidden_2, n_hidden_3], stddev=stddev)),
+    'h3_out': tf.Variable(tf.random_normal([n_hidden_3, n_classes], stddev=stddev))
+}
+biases = {
+    'b_h1': tf.Variable(tf.random_normal([n_hidden_1])),
+    'b_h2': tf.Variable(tf.random_normal([n_hidden_2])),
+    'b_h3': tf.Variable(tf.random_normal([n_hidden_3])),
+    'out': tf.Variable(tf.random_normal([n_classes]))
+}
+
+# Create model
+
+activation_h1 = tf.nn.sigmoid(tf.add(tf.matmul(x, weights['input_h1']), biases['b_h1']))
+activation_h2 = tf.nn.sigmoid(tf.add(tf.matmul(activation_h1, weights['h1_h2']), biases['b_h2']))
+activation_h3 = tf.nn.sigmoid(tf.add(tf.matmul(activation_h2, weights['h2_h3']), biases['b_h3']))
+
+# 4. Dropout regularization method by using tf.nn.dropout, does not really affects test accuracy.
+keep_prob = 0.7
+activation_h3_drop = tf.nn.dropout(activation_h3, keep_prob)
+model_pred = tf.nn.sigmoid(tf.add(tf.matmul(activation_h3_drop, weights['h3_out']), biases['out']))
+
+
+# 3. ReLu activation unit by using tf.nn.relu, does not improve test accuracy
+
+#activation_h1 = tf.nn.relu(tf.add(tf.matmul(x, weights['input_h1']), biases['b_h1']))
+#activation_h2 = tf.nn.relu(tf.add(tf.matmul(activation_h1, weights['h1_h2']), biases['b_h2']))
+#activation_h3 = tf.nn.relu(tf.add(tf.matmul(activation_h2, weights['h2_h3']), biases['b_h3']))
+#model_pred = tf.nn.relu(tf.add(tf.matmul(activation_h3, weights['h3_out']), biases['out']))
+
+# Define loss
+cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(model_pred, y)) # Softmax loss
+
+print ("Download and Extract MNIST dataset")
+mnist = input_data.read_data_sets('data/', one_hot=True)
+print (" tpye of 'mnist' is ", type(mnist))
+print (" number of trian data is %d" % (mnist.train.num_examples))
+print (" number of test data is %d" % (mnist.test.num_examples))
+
+# training params
+learning_rate = 0.01
+noOfiterations = 20
+batch_size = 100
+display_step = 1
+
+# adam optimizer converges quickly than gradient descent optimizer
+optimizer = tf.train.AdamOptimizer(learning_rate).minimize(cost)
+
+# 5. Using tf.train.MomentumOptimizer does not give better results
+
+#optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=0.1).minimize(cost)
+
+# Initializing the variables
+init = tf.initialize_all_variables()
+
+# open session
+with tf.Session() as sess:
+    sess.run(init)
+    
+    # training
+    for iteration in range(noOfiterations):
+        
+        average_cost = 0.
+        noOfBatches = int(mnist.train.num_examples / batch_size)
+        
+        # loop through batches
+        for i in range(noOfBatches):
+            
+            batch_xs, batch_ys = mnist.train.next_batch(batch_size)
+            
+            # fit training using batch
+            sess.run(optimizer, feed_dict={x: batch_xs, y: batch_ys})
+            
+            # calculate average cost
+            average_cost += sess.run(cost, feed_dict={x: batch_xs, y: batch_ys}) / noOfBatches
+            
+        # display logs per iteration
+        if iteration % display_step == 0:
+            print "Iteration:", '%4d' % (iteration + 1), "cost =", "{:.5f}".format(average_cost)
+
+    print "\nResults:\n"
+
+    # Test model
+    predictions = tf.equal(tf.argmax(model_pred, 1), tf.argmax(y, 1))
+    # Calculate accuracy
+    accuracy = tf.reduce_mean(tf.cast(predictions, "float"))
+    print "Accuracy:", accuracy.eval({x: mnist.test.images, y: mnist.test.labels})
+    writer = tf.train.SummaryWriter('/tmp/tf_logs/mlp_model',sess.graph)

@@ -1,0 +1,98 @@
+import numpy as np
+import tensorflow as tf
+from tensorflow.examples.tutorials.mnist import input_data
+
+# 1. Load MNIST dataset
+
+print ("Download and Extract MNIST dataset")
+mnist = input_data.read_data_sets('data/', one_hot=True)
+print (" tpye of 'mnist' is ", type(mnist))
+print (" number of trian data is %d" % (mnist.train.num_examples))
+print (" number of test data is %d" % (mnist.test.num_examples))
+
+# 2. Create Graph for Logistic Regression
+
+# define params
+
+learning_rate = 0.01
+noOfiterations = 5
+batch_size = 100
+display_step = 1
+
+# set graph
+x = tf.placeholder("float", [None, 784]) # mnist data image has size 28 * 28 = 784
+y = tf.placeholder("float", [None, 10]) # 0-9 digits recognition, we have 10 classes
+
+# create model
+
+# set weights
+W = tf.Variable(tf.zeros([784, 10]))
+b = tf.Variable(tf.zeros([10]))
+
+# 3. Implement the loss function using tf.nn.softmax() and tf.matmul(), tf.reduce_sum(), tf.reduce_mean(), tf.log()
+
+# construct model using SoftMax function
+activation = tf.nn.softmax(tf.matmul(x, W) + b)
+
+# minimize error using cross entropy
+cost = -tf.reduce_sum(y * tf.log(activation))
+
+# 4. Define an optimizer using tf.train.GradientDescentOptimizer().minimize()
+
+optimizer = tf.train.GradientDescentOptimizer(learning_rate).minimize(cost) # Gradient Descent
+
+# 5. Training the graph using mini-batch learning using mnist.train.next_batch()
+# 6. Define a node to calculate prediction accuracy using tf.argmax()
+# 7. Training the graph using mini-batch learning using mnist.train.next_batch()
+# 8. Compute average loss, training accuracy, test accuracy
+# 9. Draw loss vs iteration graph with your best parameters.
+
+# init vars
+init = tf.initialize_all_variables()
+
+# Create a summary to monitor cost function
+tf.scalar_summary("loss", cost)
+
+# merge all summaries
+summary_op = tf.merge_all_summaries()
+
+# open session
+with tf.Session() as sess:
+    sess.run(init)
+
+    # write summaries to logs
+    summary_writer = tf.train.SummaryWriter('/tmp/tf_logs/logistic_regression', sess.graph)
+    
+    # training
+    for iteration in range(noOfiterations):
+        
+        average_cost = 0.
+        noOfBatches = int(mnist.train.num_examples / batch_size)
+        
+        # loop through batches
+        for i in range(noOfBatches):
+            
+            batch_xs, batch_ys = mnist.train.next_batch(batch_size)
+            
+            # fit training using batch
+            sess.run(optimizer, feed_dict={x: batch_xs, y: batch_ys})
+            
+            # calculate average cost
+            average_cost += sess.run(cost, feed_dict={x: batch_xs, y: batch_ys}) / noOfBatches
+            
+             # write logs at every iteration
+            summary_str = sess.run(summary_op, feed_dict={x: batch_xs, y: batch_ys})
+            summary_writer.add_summary(summary_str, iteration * noOfBatches + i)
+            
+        # display logs per iteration
+        if iteration % display_step == 0:
+            print "Iteration:", '%4d' % (iteration + 1), "cost=", "{:.5f}".format(average_cost)
+
+    print "\nResults:\n"
+
+    # Test model
+    predictions = tf.equal(tf.argmax(activation, 1), tf.argmax(y, 1))
+    # Calculate accuracy
+    accuracy = tf.reduce_mean(tf.cast(predictions, "float"))
+    print "Accuracy:", accuracy.eval({x: mnist.test.images, y: mnist.test.labels})
+    print "Run $tensorboard --logdir=/tmp/tf_logs/logistic_regression for a scalar data"

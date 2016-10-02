@@ -1,0 +1,25 @@
+import tensorflow as tf
+
+session = tf.Session()
+
+#variable initialization
+x = tf.placeholder("float", [100, 784], name = "x")
+y = tf.placeholder("float", [100, 10], name = "y")
+W = tf.Variable(tf.random_normal([784, 10]), name = "W")
+b = tf.Variable(tf.zeros([100, 10]), name = "b")
+
+#calculation of netSum, activation, and cost function
+multXW = tf.matmul(x, W)
+netSum = tf.add(multXW, b)
+activation = tf.nn.softmax(netSum, name="softmax_out")
+cost = tf.sub(activation, y)
+
+#squareError, mean and rank
+squareError = tf.square(cost)
+mean = tf.reduce_mean(squareError, 1)
+rank = tf.rank(squareError, "Rank") #NOT REQUIRED
+
+
+relu_out = tf.nn.relu(mean)
+session.run(tf.initialize_all_variables())
+writer = tf.train.SummaryWriter('/tmp/tf_logs/relu', session.graph)

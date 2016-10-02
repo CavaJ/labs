@@ -1,0 +1,198 @@
+import numpy as np
+import tensorflow as tf
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib import cm
+import plotly
+import plotly.plotly as py
+import plotly.graph_objs as go
+%matplotlib inline
+
+
+
+
+#data = np.fromfile(file='maize_rep1_roots015_dim_xyz_221,821,221.raw', dtype=np.float32).reshape([221,821,221])
+
+data = np.fromfile(file='maize_rep1_roots015_dim_xyz_111,411,111.raw', dtype=np.float32).reshape([111,411,111])
+
+#small pixels
+#data = np.fromfile(file='maize_rep1_roots015_dim_xyz_56,206,56.raw', dtype=np.float32).reshape([56,206,56])
+
+x=[]; y=[]; z=[]; c=[]; labels=[]; pixels=[]
+'''
+for i in range(56):
+    for j in range(206):
+        for k in range(56):
+            if(data[i][j][k] > 0): 
+                x.append(i)
+                y.append(j)
+                z.append(k)
+                c.append(data[i][j][k])
+                pixels.append(data[i][j][k])
+                labels.append(1)
+            else:
+                pixels.append(data[i][j][k])
+                labels.append(0)
+'''
+
+'''
+for i in range(221):
+    for j in range(821):
+        for k in range(221):
+            if(data[i][j][k] > 0): 
+                x.append(i)
+                y.append(j)
+                z.append(k)
+                c.append(data[i][j][k])
+'''
+
+# 111 x 411 x 111
+#'''
+for i in range(111):
+    for j in range(411):
+        for k in range(111):
+            if(data[i][j][k] > 0): 
+                x.append(i)
+                y.append(j)
+                z.append(k)
+                c.append(data[i][j][k])
+                pixels.append(data[i][j][k])
+                labels.append(1)
+            else:
+                pixels.append(data[i][j][k])
+                labels.append(0)
+#'''
+
+# total number of pixels
+total_pixels = len(pixels)
+
+# total number of root pixels
+total_root_pixels = len(c)
+
+# imbalance
+imbalance = (int) ((total_pixels - total_root_pixels) / total_root_pixels)
+
+print("%d root pixels" % total_root_pixels)
+print("%d labels" % len(labels))
+print("%d pixels" % total_pixels)
+print("%d:1 relative imbalance" % imbalance)
+
+numInstances = len(pixels)
+
+
+
+
+# webgl is not supported, plotly cannot be used, tried to use matplotlib for 3d projection
+
+fig = plt.figure()
+ax = fig.gca(projection='3d')
+
+#ax = fig.add_subplot(111, projection='3d')
+
+ax.scatter(xs=x, ys=y, zs=z, c=c, cmap=cm.jet, linewidth=0.2)
+
+
+
+
+
+# Network Parameters
+n_input_x = 111 # Input image x-dimension
+n_input_y = 411 # Input image y-dimension
+n_input_z = 111 # Input image z-dimension
+n_input_channel = 1 #3 #Red, Green, Blue
+n_classes = 2 # Binary classification -- a root or a soil
+
+n_conv1_patch_size = 3
+n_conv1_filter = 1 #n_out_channels for conv1
+
+n_conv2_patch_size = 3
+n_conv2_filter = 1 #n_out_channels for conv2
+#n_output = n_input_x * n_input_y * n_input_z
+
+n_output  = 2 # root or soil
+
+dim = n_input_x * n_input_y * n_input_z
+
+#x_input Shape [batch, in_depth, in_height, in_width, in_channels].
+
+# tf Graph input
+x_input = tf.placeholder(tf.float32, [None, n_input_x * n_input_y * n_input_z * n_input_channel])
+#y_label = tf.placeholder(tf.float32, [None, n_output])
+#y_label = tf.placeholder(tf.float32, [None, n_input_x * n_input_y * n_input_z], name="ground_truth")
+y_label = tf.placeholder(tf.float32, name="output")
+
+
+# Create some wrappers for simplicity
+def conv3d(_x, W, b, strides=1):
+    # Conv3D wrapper, with bias and relu activation
+    _x = tf.nn.conv3d(_x, W, strides=[1, strides, strides, strides, 1], padding='SAME')
+    _x = tf.nn.bias_add(_x, b)
+    return tf.nn.relu(_x)
+
+def maxpool3d(_x, k=2):
+    # MaxPool3D wrapper
+    return tf.nn.max_pool3d(_x, ksize=[1, k, k, k, 1], strides=[1, k, k, k, 1],
+                          padding='SAME')
+
+#Shape [filter_depth, filter_height, filter_width, in_channels, out_channels]. in_channels must match between input 
+#and filter.
+wc1 = tf.Variable(tf.random_normal([n_conv1_patch_size, n_conv1_patch_size, 
+                                    n_conv1_patch_size, n_input_channel, n_conv1_filter], stddev=0.1))
+
+bc1 = tf.Variable(tf.random_normal([n_conv1_filter], stddev=0.1))
+
+
+wc2 = tf.Variable(tf.random_normal([n_conv2_patch_size, n_conv2_patch_size, 
+                                    n_conv2_patch_size, n_conv1_filter, n_conv2_filter], stddev=0.1))
+
+bc2 = tf.Variable(tf.random_normal([n_conv2_filter], stddev=0.1))
+
+wf = tf.Variable(tf.random_normal([(n_input_x) * (n_input_y) * (n_input_z) * n_conv2_filter, dim], stddev=0.1))
+bf = tf.Variable(tf.random_normal([dim], stddev=0.1))
+
+# reshape x for convolution
+x_reshaped = tf.reshape(x_input, shape=[-1, 56, 205, 56, 1])
+
+#print(x_reshaped.get_shape())
+
+# Convolution, Add-bias and Pass ReLu
+conv1 = conv3d(x_reshaped, wc1, bc1, strides=1)
+
+#print(conv1.get_shape())
+
+# Max-pooling
+pool1  = maxpool3d(conv1, k=1)
+
+#print(pool1.get_shape())
+
+# Convolution, Add-bias and Pass ReLu
+conv2 = conv3d(pool1, wc2, bc2, strides=1)
+
+#print(conv2.get_shape())
+
+# Max-pooling
+pool2  = maxpool3d(conv2, k=1)
+
+#print(pool2.get_shape())
+
+# Vectorize
+dense = tf.reshape(pool2, [-1, wf.get_shape().as_list()[0]])
+
+# construct model using SoftMax function
+activation = tf.nn.softmax(tf.matmul(dense, wf) + bf)
+
+print("activation shape: %s" % activation.get_shape())
+
+# minimize error using cross entropy
+cost = -tf.reduce_sum(y_label * tf.log(activation))
+
+
+
+# TODO training, classification accuracy, network output etc...
+
+
+
+fig = go.Figure(data=[go.Scatter3d(x=x,y=y,z=z, mode='markers', marker=dict(symbol='circle-dot', size=1))],
+               layout=go.Layout(scene=dict(aspectmode='data')))
+plotly.offline.init_notebook_mode()
+plotly.offline.iplot(fig, filename='maize_rep1_roots015_dim_xyz_111,411,111')

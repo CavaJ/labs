@@ -1,0 +1,111 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import tensorflow as tf
+from tensorflow.examples.tutorials.mnist import input_data
+%matplotlib inline
+
+# FIRST PART OF ASSIGMENT 4. I got test accuracy of 0.98 when running the code. I have played with different filter 
+# sizes, almost all numbers I have played with just gave almost the same result as 64. The learning rate I have chosen 
+# is 0.001 and batch size 128 gave me better results.
+
+#sess = tf.Session()
+
+n_input_width = 28
+n_input_height = 28
+n_input_channel = 1
+
+n_conv1_patch_size = 3 
+n_conv1_filter = 64
+
+n_output  = 10 # e.g. MNIST total classes (0-9 digits)
+
+# tf Graph input
+x = tf.placeholder(tf.float32, [None, n_input_width * n_input_height])
+y = tf.placeholder(tf.float32, [None, n_output])
+
+#convolution layer weights
+wc1 = tf.Variable(tf.random_normal([n_conv1_patch_size, n_conv1_patch_size, n_input_channel, n_conv1_filter], stddev=0.1))
+bc1 = tf.Variable(tf.random_normal([n_conv1_filter], stddev=0.1))
+
+#fully connected layer weights
+wf1 = tf.Variable(tf.random_normal([(n_input_width/2)*(n_input_height/2)*n_conv1_filter, n_output], stddev=0.1))
+bf1 = tf.Variable(tf.random_normal([n_output], stddev=0.1))
+
+# Reshape input
+input_r = tf.reshape(x, shape=[-1, n_input_width, n_input_width, 1])
+# Convolution
+conv = tf.nn.conv2d(input_r, wc1, strides=[1, 1, 1, 1], padding='SAME')
+# Add-bias
+bias = tf.nn.bias_add(conv, bc1)
+# Pass ReLu
+relu = tf.nn.relu(bias)
+# Max-pooling
+pool  = tf.nn.max_pool(relu, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
+# Vectorize
+dense = tf.reshape(pool, [-1, wf1.get_shape().as_list()[0]])
+# Fully-connected layer
+out = tf.add(tf.matmul(dense, wf1), bf1)
+
+cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(out, y))
+
+#writer = tf.train.SummaryWriter('/tmp/tf_logs/cnn_model',sess.graph)
+
+# 1. Load MNIST dataset
+
+print ("Download and Extract MNIST dataset")
+mnist = input_data.read_data_sets('data/', one_hot=True)
+print (" tpye of 'mnist' is ", type(mnist))
+print (" number of trian data is %d" % (mnist.train.num_examples))
+print (" number of test data is %d" % (mnist.test.num_examples))
+
+# 2. Construct a optimizer using tf.train.AdamOptimizer
+# 3. Train the model by changing learning_rate, training_epochs, batch_size, the number and size of filters
+
+learning_rate = 0.001
+noOfiterations = 5
+batch_size = 128
+display_step = 1
+
+# adam optimizer converges quickly than gradient descent optimizer
+optimizer = tf.train.AdamOptimizer(learning_rate).minimize(cost)
+
+# Initializing the variables
+init = tf.initialize_all_variables()
+
+# open session
+with tf.Session() as sess:
+    sess.run(init)
+    
+    # training
+    for iteration in range(noOfiterations):
+        
+        average_cost = 0.
+        noOfBatches = int(mnist.train.num_examples / batch_size)
+        
+        # loop through batches
+        for i in range(noOfBatches):
+            
+            batch_xs, batch_ys = mnist.train.next_batch(batch_size)
+            
+            # fit training using batch
+            sess.run(optimizer, feed_dict={x: batch_xs, y: batch_ys})
+            
+            # calculate average cost
+            average_cost += sess.run(cost, feed_dict={x: batch_xs, y: batch_ys}) / noOfBatches
+            
+            # write logs at every iteration
+            #summary_str = sess.run(summary_op, feed_dict={x: batch_xs, y: batch_ys})
+            #summary_writer.add_summary(summary_str, iteration * noOfBatches + i)
+            
+        # display logs per iteration
+        if iteration % display_step == 0:
+            print "Iteration:", '%4d' % (iteration + 1), "cost=", "{:.5f}".format(average_cost)
+
+    print "\nResults:\n"
+
+    # Test model
+    predictions = tf.equal(tf.argmax(out, 1), tf.argmax(y, 1))
+    # Calculate accuracy
+    accuracy = tf.reduce_mean(tf.cast(predictions, "float"))
+    print "Accuracy:", accuracy.eval({x: mnist.test.images, y: mnist.test.labels})
+    writer = tf.train.SummaryWriter('/tmp/tf_logs/cnn_model',sess.graph)
